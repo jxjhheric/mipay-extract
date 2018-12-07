@@ -99,6 +99,15 @@ popd() {
     command popd "$@" > /dev/null
 }
 
+getAppNameAndArch() {
+    app_str=$1
+    OLD_IFS="$IFS"
+    IFS=":"
+    arr=($app_str)
+    IFS="$OLD_IFS"
+    echo ${arr[*]}
+}
+
 deodex() {
     app=$2
     base_dir="$1"
@@ -338,8 +347,10 @@ extract() {
     for f in $priv_apps; do
         echo "----> copying $f..."
         has_priv_apps=true
-        echo "system/$f" >> "$work_dir"/$privapp
-        $sevenzip x -odeodex/system/ "$img" $f >/dev/null || clean "$work_dir"
+        app_info=($(getAppNameAndArch $f))
+        priv_app=${app_info[0]}
+        echo "system/$priv_app" >> "$work_dir"/$privapp
+        $sevenzip x -odeodex/system/ "$img" $priv_app >/dev/null || clean "$work_dir"
     done
     archs="arm64 x86_64 arm x86"
     arch="arm64"
@@ -358,7 +369,13 @@ extract() {
         deodex "$work_dir" "$f" "$arch" "$PWD/$img" app || clean "$work_dir"
     done
     for f in $priv_apps; do
-        deodex "$work_dir" "$(basename $f)" "$arch" "$PWD/$img" "$(dirname $f)" || clean "$work_dir"
+        app_info=($(getAppNameAndArch $f))
+        priv_app=${app_info[0]}
+        priv_arch=${app_info[1]}
+        if [[ -z $priv_arch ]]; then
+            priv_arch=$arch
+        fi
+        deodex "$work_dir" "$(basename $priv_app)" "$priv_arch" "$PWD/$img" "$(dirname $f)" || clean "$work_dir"
     done
 
     echo "--> packaging flashable zip"
@@ -387,7 +404,9 @@ EOF
         rm -f ../../eufix-appvault-$model-$ver.zip $privapp
         file_list=""
         for f in $priv_apps; do
-            file_list="$file_list system/$f"
+            app_info=($(getAppNameAndArch $f))
+            priv_app=${app_info[0]}
+            file_list="$file_list system/$priv_app"
         done
         $sevenzip a -tzip ../../eufix-appvault-$model-$ver.zip META-INF $file_list >/dev/null
     fi
